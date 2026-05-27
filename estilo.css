@@ -78,6 +78,20 @@
     font-size:20px;
   }
 
+  .topbar,
+  .view{
+    transition:.28s ease;
+  }
+
+  .main.hidden-mobile .topbar,
+  .main.hidden-mobile .view{
+    opacity:0;
+    transform:translateY(10px);
+    pointer-events:none;
+  }
+
+}
+
   /* CONTEÚDO */
   .view{
     padding:18px;
