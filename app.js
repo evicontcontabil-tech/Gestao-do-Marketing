@@ -233,31 +233,58 @@ function renderTasks(){
     if(fStatus && t.status!==fStatus) return false;
     if(fPrio && t.prioridade!==fPrio) return false;
     if(fArea && t.area!==fArea) return false;
-    if(search && ![t.titulo,t.area,t.responsavel].join(' ').toLowerCase().includes(search)) return false;
+    if(search){
+      const blob = [t.titulo,t.area,t.responsavel,t.meta,t.observacoes].join(' ').toLowerCase();
+      if(!blob.includes(search)) return false;
+    }
     return true;
+  });
+  list.sort((a,b)=>{
+    if(a.status==='Concluído' && b.status!=='Concluído') return 1;
+    if(b.status==='Concluído' && a.status!=='Concluído') return -1;
+    const ad=a.prazo?new Date(a.prazo).getTime():Infinity;
+    const bd=b.prazo?new Date(b.prazo).getTime():Infinity;
+    return ad-bd;
   });
 
   document.getElementById('taskCount').textContent = `${list.length} tarefas`;
   const rows = list.map(t=>{
     const d = diffDays(t.prazo);
+    let dayHtml = '<span style="color:var(--muted)">—</span>';
+    if(t.prazo){
+      const cls = t.status==='Concluído' ? 'ok' : (d<0?'atrasado':d===0?'hoje':'ok');
+      const label = t.status==='Concluído' ? 'Concluído' : (d<0?`${Math.abs(d)}d atraso`:d===0?'Hoje':`em ${d}d`);
+      dayHtml = `<div style="display:flex;flex-direction:column;gap:2px"><div style="font-size:12px">${fmtDate(t.prazo)}</div><div class="badge-dia ${cls}" style="font-size:11px">${label}</div></div>`;
+    }
     const statusClass = 'badge-status-'+({'Não iniciado':'nao','Em andamento':'andamento','Pausado':'pausado','Concluído':'concluido'}[t.status]||'nao');
+    const prioClass = 'badge-prio-'+({'Alta':'alta','Média':'media','Baixa':'baixa'}[t.prioridade]||'media');
+
     return `<tr data-id="${t.id}">
-      <td><div class="task-title">${esc(t.titulo)}</div></td>
+      <td><div class="task-title">${esc(t.titulo)}</div>${t.meta?`<div class="task-sub">${esc(t.meta)}</div>`:''}</td>
       <td>${esc(t.area||'—')}</td>
       <td>${esc(t.responsavel||'—')}</td>
       <td><span class="badge ${statusClass}">${esc(t.status)}</span></td>
-      <td>${fmtDate(t.prazo)}</td>
+      <td><span class="badge ${prioClass}">${esc(t.prioridade||'Média')}</span></td>
+      <td>${dayHtml}</td>
       <td><div class="row-actions">
+        <button data-act="toggle">${t.status==='Concluído'?'Reabrir':'Concluir'}</button>
         <button data-act="edit">Editar</button>
         <button data-act="delete">Excluir</button>
       </div></td>
     </tr>`;
   }).join('');
-  document.getElementById('taskTableWrap').innerHTML = `<table class="tasks"><thead><tr><th>Tarefa</th><th>Área</th><th>Resp.</th><th>Status</th><th>Prazo</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+  document.getElementById('taskTableWrap').innerHTML = `<table class="tasks"><thead><tr><th>Tarefa</th><th>Área</th><th>Resp.</th><th>Status</th><th>Prio</th><th>Prazo</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
   
   document.querySelectorAll('table.tasks tbody tr').forEach(tr=>{
     const id = tr.dataset.id;
     tr.querySelector('[data-act=edit]').addEventListener('click', ()=> openTaskModal(id));
+    tr.querySelector('[data-act=toggle]').addEventListener('click', async ()=>{
+      const t = state.tasks.find(x=>x.id===id);
+      if(!t) return;
+      if(t.status==='Concluído'){ t.status='Em andamento'; t.dataConclusao=null; }
+      else { t.status='Concluído'; t.dataConclusao=isoToday(); }
+      await saveKey('tasks', state.tasks); renderTasks(); toast(t.status==='Concluído'?'Tarefa concluída':'Reaberta');
+    });
     tr.querySelector('[data-act=delete]').addEventListener('click', async ()=>{
       if(confirm('Excluir?')){ state.tasks = state.tasks.filter(x=>x.id!==id); await saveKey('tasks', state.tasks); renderTasks(); }
     });
@@ -272,15 +299,23 @@ function openTaskModal(id=null){
   state.editingTaskId = id;
   const t = id ? state.tasks.find(x=>x.id===id) : {};
   const isNew = !id;
+  const opt = (arr,sel) => arr.map(o=>`<option value="${esc(o)}" ${o===sel?'selected':''}>${esc(o)}</option>`).join('');
+
   const html = `<div class="modal-backdrop" id="taskModal"><div class="modal">
-    <h3>${isNew?'Nova Tarefa':'Editar Tarefa'}</h3>
+    <h3>${isNew?'Nova tarefa':'Editar tarefa'}</h3>
     <form id="taskForm">
-      <input name="titulo" value="${esc(t.titulo||'')}" required placeholder="Título">
-      <select name="status">${STATUS_LIST.map(s=>`<option ${t.status===s?'selected':''}>${s}</option>`).join('')}</select>
-      <select name="area">${AREA_LIST.map(a=>`<option ${t.area===a?'selected':''}>${a}</option>`).join('')}</select>
-      <input type="date" name="prazo" value="${t.prazo||''}">
-      <button type="submit">Salvar</button>
-      <button type="button" onclick="document.getElementById('taskModal').remove()">Cancelar</button>
+      <div class="form-grid">
+        <div class="form-field full"><label>Tarefa *</label><input name="titulo" value="${esc(t.titulo||'')}" required></div>
+        <div class="form-field"><label>Área</label><select name="area">${opt(AREA_LIST, t.area||'')}</select></div>
+        <div class="form-field"><label>Responsável</label><input name="responsavel" value="${esc(t.responsavel||state.user.nome)}"></div>
+        <div class="form-field"><label>Status</label><select name="status">${opt(STATUS_LIST, t.status||'Não iniciado')}</select></div>
+        <div class="form-field"><label>Prioridade</label><select name="prioridade">${opt(PRIO_LIST, t.prioridade||'Média')}</select></div>
+        <div class="form-field"><label>Prazo</label><input type="date" name="prazo" value="${t.prazo||''}"></div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn btn-soft" onclick="document.getElementById('taskModal').remove()">Cancelar</button>
+        <button type="submit" class="btn btn-primary">Salvar</button>
+      </div>
     </form>
   </div></div>`;
   document.body.insertAdjacentHTML('beforeend', html);
@@ -288,11 +323,9 @@ function openTaskModal(id=null){
     e.preventDefault();
     const fd = new FormData(e.target);
     const data = Object.fromEntries(fd.entries());
-    if(isNew) state.tasks.push({id: uid(), ...data});
+    if(isNew) state.tasks.push({id: uid(), ...data, criadoEm: new Date().toISOString()});
     else { const idx = state.tasks.findIndex(x=>x.id===id); state.tasks[idx] = {...state.tasks[idx], ...data}; }
-    await saveKey('tasks', state.tasks);
-    document.getElementById('taskModal').remove();
-    renderTasks();
+    await saveKey('tasks', state.tasks); document.getElementById('taskModal').remove(); renderTasks(); renderDashboard();
   });
 }
 
@@ -305,19 +338,27 @@ function renderCalendar(){
   const d = state.calDate;
   const year = d.getFullYear(), month = d.getMonth();
   document.getElementById('calMonth').textContent = d.toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
-  const daysInMonth = new Date(year, month+1, 0).getDate();
-  const firstDay = new Date(year, month, 1).getDay();
   
-  let grid = "";
-  for(let i=0; i<firstDay; i++) grid += '<div class="cal-cell other"></div>';
-  for(let day=1; day<=daysInMonth; day++){
-    const iso = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-    const evs = state.posts.filter(p=>p.data===iso);
-    grid += `<div class="cal-cell" data-date="${iso}">
-      <div class="num">${day}</div>
-      <div class="events">${evs.map(e=>`<div class="ev">${esc(e.titulo)}</div>`).join('')}</div>
+  const first = new Date(year, month, 1);
+  const startDay = first.getDay();
+  const daysInMonth = new Date(year, month+1, 0).getDate();
+  const daysPrev = new Date(year, month, 0).getDate();
+  const today = new Date(); today.setHours(0,0,0,0);
+  
+  const cells = [];
+  for(let i=startDay-1; i>=0; i--) cells.push({day: daysPrev-i, other:true, date: new Date(year, month-1, daysPrev-i)});
+  for(let day=1; day<=daysInMonth; day++) cells.push({day, other:false, date: new Date(year, month, day), isToday: new Date(year, month, day).getTime()===today.getTime()});
+  const remaining = 42 - cells.length;
+  for(let i=1; i<=remaining; i++) cells.push({day: i, other:true, date: new Date(year, month+1, i)});
+
+  const grid = cells.map(c=>{
+    const iso = c.date.toISOString().slice(0,10);
+    const events = state.posts.filter(p=>p.data===iso);
+    return `<div class="cal-cell ${c.other?'other':''} ${c.isToday?'today':''}" data-date="${iso}">
+      <div class="num">${c.day}</div>
+      <div class="events">${events.map(e=>`<div class="ev">${esc(e.titulo)}</div>`).join('')}</div>
     </div>`;
-  }
+  }).join('');
   document.getElementById('calGrid').innerHTML = grid;
   document.querySelectorAll('.cal-cell[data-date]').forEach(c=> c.addEventListener('click', ()=> openPostModal(null, c.dataset.date)));
 }
@@ -330,7 +371,7 @@ function openPostModal(id=null, dataPre=null){
       <input name="titulo" value="${esc(p.titulo||'')}" required placeholder="Título">
       <input type="date" name="data" value="${p.data||dataPre||''}" required>
       <select name="tipo">${TIPO_POST.map(t=>`<option>${t}</option>`).join('')}</select>
-      <button type="submit">Salvar</button>
+      <button type="submit">Agendar</button>
       <button type="button" onclick="document.getElementById('postModal').remove()">Cancelar</button>
     </form>
   </div></div>`;
@@ -338,22 +379,20 @@ function openPostModal(id=null, dataPre=null){
   document.getElementById('postForm').addEventListener('submit', async (e)=>{
     e.preventDefault();
     const fd = new FormData(e.target);
-    const data = Object.fromEntries(fd.entries());
-    state.posts.push({id: uid(), ...data});
-    await saveKey('posts', state.posts);
-    document.getElementById('postModal').remove();
-    renderCalendar();
+    state.posts.push({id: uid(), ...Object.fromEntries(fd.entries()), criadoEm: new Date().toISOString()});
+    await saveKey('posts', state.posts); document.getElementById('postModal').remove(); renderCalendar();
   });
 }
 
 /* ===================== IDEIAS ===================== */
 function renderIdeas(){
   const list = state.ideas;
+  document.getElementById('ideaCount').textContent = `${list.length} ideias`;
   document.getElementById('ideasWrap').innerHTML = `<div class="ideas-grid">${list.map(i=>`
     <div class="idea-card">
-      <span class="cat">${esc(i.categoria)}</span>
+      <span class="cat">${esc(i.categoria||'GERAL')}</span>
       <h4>${esc(i.titulo)}</h4>
-      <p>${esc(i.descricao)}</p>
+      <p>${esc(i.descricao||'')}</p>
     </div>
   `).join('')}</div>`;
 }
@@ -372,11 +411,8 @@ function openIdeaModal(){
   document.body.insertAdjacentHTML('beforeend', html);
   document.getElementById('ideaForm').addEventListener('submit', async (e)=>{
     e.preventDefault();
-    const fd = new FormData(e.target);
     state.ideas.push({id: uid(), ...Object.fromEntries(fd.entries()), criadoEm: new Date().toISOString()});
-    await saveKey('ideas', state.ideas);
-    document.getElementById('ideaModal').remove();
-    renderIdeas();
+    await saveKey('ideas', state.ideas); document.getElementById('ideaModal').remove(); renderIdeas();
   });
 }
 
@@ -405,7 +441,6 @@ function renderFunnel() {
       </div>
     </div>
   `;
-  document.getElementById('strategyAdvice').innerHTML = `<div style="background:var(--orange-soft);padding:20px;border-radius:12px;border-left:4px solid var(--orange);">Análise: Equilíbrio de funil processado.</div>`;
 }
 
 /* ===================== INIT ===================== */
@@ -418,10 +453,6 @@ async function init(){
     await saveAll();
   }
   if(state.user) showApp();
-  else {
-    // Fallback para demo se não houver login
-    state.user = {nome: "Usuário Demo"};
-    showApp();
-  }
+  else { state.user = {nome: "Usuário Demo"}; showApp(); }
 }
 init();
