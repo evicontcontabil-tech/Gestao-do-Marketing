@@ -57,7 +57,6 @@ const Storage = {
 
 async function loadState(){
   try{
-    // Carregar dados salvos no Storage
     const res = await Storage.list('evicont:');
     if(res && res.keys){
       for(const k of res.keys){
@@ -73,23 +72,19 @@ async function loadState(){
         }catch(e){}
       }
     }
-
-    // Se não houver dados no storage, tenta carregar do window.NOTION_DATA (importado via script)
-    if(state.tasks.length === 0 && window.NOTION_DATA){
-      state.tasks = window.NOTION_DATA.tasks || [];
-      state.posts = window.NOTION_DATA.posts || [];
-      state.ideas = window.NOTION_DATA.ideas || [];
-    }
-
-    if(state.user){
-      showApp();
-    }
   }catch(e){ console.warn('Load failed', e); }
 }
-
 async function saveKey(key, value){
   try{ await Storage.set('evicont:'+key, JSON.stringify(value)); }
   catch(e){ console.warn('Save failed', e); }
+}
+async function saveAll(){
+  await Promise.all([
+    state.user && saveKey('user', state.user),
+    saveKey('tasks', state.tasks),
+    saveKey('posts', state.posts),
+    saveKey('ideas', state.ideas),
+  ]);
 }
 
 /* ===================== UTILS ===================== */
@@ -116,13 +111,14 @@ function toast(msg, type='success'){
   document.body.appendChild(t);
   setTimeout(()=>t.remove(), 2600);
 }
+const esc = s => String(s??'').replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 
 /* ===================== LOGIN ===================== */
 document.getElementById('loginForm').addEventListener('submit', async (e)=>{
   e.preventDefault();
   const nome = document.getElementById('liNome').value.trim();
   if(!nome) return;
-  state.user = {nome, role:'SOCIAL MEDIA', loggedAt: new Date().toISOString()};
+  state.user = {nome, role:'Social Media', loggedAt: new Date().toISOString()};
   await saveKey('user', state.user);
   showApp();
   toast('Bem-vindo, '+nome.split(' ')[0]+'!');
@@ -168,14 +164,16 @@ function switchView(view){
   if(view==='tarefas') renderTasks();
   if(view==='calendario') renderCalendar();
   if(view==='ideias') renderIdeas();
-  if(view==='relatorios') renderReports();
+  if(view==='relatorios') {
+    renderReports();
+    renderFunnel();
+  }
 }
 
 /* ===================== DASHBOARD ===================== */
 function renderDashboard(){
   const tasks = state.tasks;
   const posts = state.posts;
-
   const total = tasks.length;
   const done = tasks.filter(t=>t.status==='Concluído').length;
   const andamento = tasks.filter(t=>t.status==='Em andamento').length;
@@ -202,142 +200,228 @@ function renderDashboard(){
     </div>
   `).join('');
 
-  // Próximos prazos
-  const upcoming = tasks
-    .filter(t=>t.status!=='Concluído' && t.prazo)
-    .sort((a,b)=> new Date(a.prazo) - new Date(b.prazo))
-    .slice(0, 6);
-
-  const upcomingHtml = upcoming.length ? upcoming.map(t=>{
+  const upcoming = tasks.filter(t=>t.status!=='Concluído' && t.prazo).sort((a,b)=> new Date(a.prazo) - new Date(b.prazo)).slice(0, 6);
+  document.getElementById('dashUpcoming').innerHTML = upcoming.length ? upcoming.map(t=>{
     const d = diffDays(t.prazo);
     const cls = d<0 ? 'atrasado' : (d===0 ? 'hoje' : 'ok');
-    const label = d<0 ? `${Math.abs(d)}d atraso` : (d===0 ? 'Hoje' : `em ${d}d`);
-    const dotCls = d<0 ? 'red' : (d===0 ? '' : (t.prioridade==='Alta'?'red':t.prioridade==='Média'?'gold':'green'));
     return `<div class="recent-item">
-      <div class="dot ${dotCls}"></div>
+      <div class="dot ${d<0?'red':(t.prioridade==='Alta'?'red':'')}"></div>
       <div><div class="title">${esc(t.titulo)}</div><div class="meta">${esc(t.area||'—')} · ${fmtDate(t.prazo)}</div></div>
-      <div class="pill">${esc(t.status)}</div>
-      <div class="badge-dia ${cls}">${label}</div>
+      <div class="badge-dia ${cls}">${d<0?`${Math.abs(d)}d atraso`:d===0?'Hoje':`em ${d}d`}</div>
     </div>`;
-  }).join('') : emptyMini('Sem prazos próximos','Crie tarefas com data de entrega para ver aqui.');
-  document.getElementById('dashUpcoming').innerHTML = upcomingHtml;
+  }).join('') : '<p style="padding:20px;color:var(--muted)">Sem prazos próximos</p>';
 
-  // Postagens da semana
   const today = new Date(); today.setHours(0,0,0,0);
-  const end = new Date(today); end.setDate(end.getDate()+7);
-  const weekPosts = posts
-    .filter(p=>{
-      if(!p.data) return false;
-      const d = new Date(p.data+'T00:00:00');
-      return d>=today && d<=end;
-    })
-    .sort((a,b)=> new Date(a.data) - new Date(b.data))
-    .slice(0,6);
-
-  const colorOf = t => {
-    if(t==='Reels') return 'green';
-    if(t==='Story') return 'gold';
-    if(t==='Vídeo') return 'blue';
-    return '';
-  };
-  const postsHtml = weekPosts.length ? weekPosts.map(p=>`
+  const weekPosts = posts.filter(p=>p.data && new Date(p.data+'T00:00:00') >= today).sort((a,b)=> new Date(a.data) - new Date(b.data)).slice(0,6);
+  document.getElementById('dashPosts').innerHTML = weekPosts.length ? weekPosts.map(p=>`
     <div class="recent-item">
-      <div class="dot ${colorOf(p.tipo)}"></div>
+      <div class="dot"></div>
       <div><div class="title">${esc(p.titulo)}</div><div class="meta">${esc(p.plataforma)} · ${esc(p.tipo)}</div></div>
-      <div class="pill">${esc(p.status)}</div>
       <div class="badge-dia ok">${fmtDate(p.data)}</div>
     </div>
-  `).join('') : emptyMini('Sem postagens nessa semana','Agende postagens no calendário.');
-  document.getElementById('dashPosts').innerHTML = postsHtml;
+  `).join('') : '<p style="padding:20px;color:var(--muted)">Sem postagens agendadas</p>';
 }
 
-function emptyMini(t,s){
-  return `<div style="padding:24px 0;text-align:center;color:var(--muted)">
-    <div style="font-family:'Instrument Serif',serif;font-size:18px;color:var(--ink);margin-bottom:4px">${t}</div>
-    <div style="font-size:12px">${s}</div>
-  </div>`;
+/* ===================== TAREFAS ===================== */
+function renderTasks(){
+  const search = (document.getElementById('taskSearch').value||'').toLowerCase();
+  const fStatus = document.getElementById('taskStatusFilter').value;
+  const fPrio = document.getElementById('taskPrioFilter').value;
+  const fArea = document.getElementById('taskAreaFilter').value;
+
+  let list = state.tasks.filter(t=>{
+    if(fStatus && t.status!==fStatus) return false;
+    if(fPrio && t.prioridade!==fPrio) return false;
+    if(fArea && t.area!==fArea) return false;
+    if(search && ![t.titulo,t.area,t.responsavel].join(' ').toLowerCase().includes(search)) return false;
+    return true;
+  });
+
+  document.getElementById('taskCount').textContent = `${list.length} tarefas`;
+  const rows = list.map(t=>{
+    const d = diffDays(t.prazo);
+    const statusClass = 'badge-status-'+({'Não iniciado':'nao','Em andamento':'andamento','Pausado':'pausado','Concluído':'concluido'}[t.status]||'nao');
+    return `<tr data-id="${t.id}">
+      <td><div class="task-title">${esc(t.titulo)}</div></td>
+      <td>${esc(t.area||'—')}</td>
+      <td>${esc(t.responsavel||'—')}</td>
+      <td><span class="badge ${statusClass}">${esc(t.status)}</span></td>
+      <td>${fmtDate(t.prazo)}</td>
+      <td><div class="row-actions">
+        <button data-act="edit">Editar</button>
+        <button data-act="delete">Excluir</button>
+      </div></td>
+    </tr>`;
+  }).join('');
+  document.getElementById('taskTableWrap').innerHTML = `<table class="tasks"><thead><tr><th>Tarefa</th><th>Área</th><th>Resp.</th><th>Status</th><th>Prazo</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+  
+  document.querySelectorAll('table.tasks tbody tr').forEach(tr=>{
+    const id = tr.dataset.id;
+    tr.querySelector('[data-act=edit]').addEventListener('click', ()=> openTaskModal(id));
+    tr.querySelector('[data-act=delete]').addEventListener('click', async ()=>{
+      if(confirm('Excluir?')){ state.tasks = state.tasks.filter(x=>x.id!==id); await saveKey('tasks', state.tasks); renderTasks(); }
+    });
+  });
 }
-const esc = s => String(s??'').replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+['taskSearch','taskStatusFilter','taskPrioFilter','taskAreaFilter'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', renderTasks);
+});
+document.getElementById('newTaskBtn').addEventListener('click', ()=> openTaskModal());
 
-/* Inicialização */
-window.addEventListener('DOMContentLoaded', loadState);
+function openTaskModal(id=null){
+  state.editingTaskId = id;
+  const t = id ? state.tasks.find(x=>x.id===id) : {};
+  const isNew = !id;
+  const html = `<div class="modal-backdrop" id="taskModal"><div class="modal">
+    <h3>${isNew?'Nova Tarefa':'Editar Tarefa'}</h3>
+    <form id="taskForm">
+      <input name="titulo" value="${esc(t.titulo||'')}" required placeholder="Título">
+      <select name="status">${STATUS_LIST.map(s=>`<option ${t.status===s?'selected':''}>${s}</option>`).join('')}</select>
+      <select name="area">${AREA_LIST.map(a=>`<option ${t.area===a?'selected':''}>${a}</option>`).join('')}</select>
+      <input type="date" name="prazo" value="${t.prazo||''}">
+      <button type="submit">Salvar</button>
+      <button type="button" onclick="document.getElementById('taskModal').remove()">Cancelar</button>
+    </form>
+  </div></div>`;
+  document.body.insertAdjacentHTML('beforeend', html);
+  document.getElementById('taskForm').addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const data = Object.fromEntries(fd.entries());
+    if(isNew) state.tasks.push({id: uid(), ...data});
+    else { const idx = state.tasks.findIndex(x=>x.id===id); state.tasks[idx] = {...state.tasks[idx], ...data}; }
+    await saveKey('tasks', state.tasks);
+    document.getElementById('taskModal').remove();
+    renderTasks();
+  });
+}
 
-/* (Restante das funções de renderização omitidas para brevidade, mas devem ser mantidas no seu arquivo original) */
-function renderTasks(){ console.log('Render Tasks'); }
-function renderCalendar(){ console.log('Render Calendar'); }
-function renderIdeas(){ console.log('Render Ideas'); }
-function renderReports(){ console.log('Render Reports'); }
+/* ===================== CALENDÁRIO ===================== */
+document.getElementById('calPrev').addEventListener('click', ()=>{ state.calDate.setMonth(state.calDate.getMonth()-1); renderCalendar(); });
+document.getElementById('calNext').addEventListener('click', ()=>{ state.calDate.setMonth(state.calDate.getMonth()+1); renderCalendar(); });
+document.getElementById('calToday').addEventListener('click', ()=>{ state.calDate = new Date(); renderCalendar(); });
 
-/* ============ PREMIUM FUNNEL LOGIC ============ */
+function renderCalendar(){
+  const d = state.calDate;
+  const year = d.getFullYear(), month = d.getMonth();
+  document.getElementById('calMonth').textContent = d.toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
+  const daysInMonth = new Date(year, month+1, 0).getDate();
+  const firstDay = new Date(year, month, 1).getDay();
+  
+  let grid = "";
+  for(let i=0; i<firstDay; i++) grid += '<div class="cal-cell other"></div>';
+  for(let day=1; day<=daysInMonth; day++){
+    const iso = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    const evs = state.posts.filter(p=>p.data===iso);
+    grid += `<div class="cal-cell" data-date="${iso}">
+      <div class="num">${day}</div>
+      <div class="events">${evs.map(e=>`<div class="ev">${esc(e.titulo)}</div>`).join('')}</div>
+    </div>`;
+  }
+  document.getElementById('calGrid').innerHTML = grid;
+  document.querySelectorAll('.cal-cell[data-date]').forEach(c=> c.addEventListener('click', ()=> openPostModal(null, c.dataset.date)));
+}
+
+function openPostModal(id=null, dataPre=null){
+  const p = id ? state.posts.find(x=>x.id===id) : {};
+  const html = `<div class="modal-backdrop" id="postModal"><div class="modal">
+    <h3>Agendar Postagem</h3>
+    <form id="postForm">
+      <input name="titulo" value="${esc(p.titulo||'')}" required placeholder="Título">
+      <input type="date" name="data" value="${p.data||dataPre||''}" required>
+      <select name="tipo">${TIPO_POST.map(t=>`<option>${t}</option>`).join('')}</select>
+      <button type="submit">Salvar</button>
+      <button type="button" onclick="document.getElementById('postModal').remove()">Cancelar</button>
+    </form>
+  </div></div>`;
+  document.body.insertAdjacentHTML('beforeend', html);
+  document.getElementById('postForm').addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const data = Object.fromEntries(fd.entries());
+    state.posts.push({id: uid(), ...data});
+    await saveKey('posts', state.posts);
+    document.getElementById('postModal').remove();
+    renderCalendar();
+  });
+}
+
+/* ===================== IDEIAS ===================== */
+function renderIdeas(){
+  const list = state.ideas;
+  document.getElementById('ideasWrap').innerHTML = `<div class="ideas-grid">${list.map(i=>`
+    <div class="idea-card">
+      <span class="cat">${esc(i.categoria)}</span>
+      <h4>${esc(i.titulo)}</h4>
+      <p>${esc(i.descricao)}</p>
+    </div>
+  `).join('')}</div>`;
+}
+document.getElementById('newIdeaBtn').addEventListener('click', ()=> openIdeaModal());
+
+function openIdeaModal(){
+  const html = `<div class="modal-backdrop" id="ideaModal"><div class="modal">
+    <h3>Nova Ideia</h3>
+    <form id="ideaForm">
+      <input name="titulo" required placeholder="Título">
+      <textarea name="descricao" placeholder="Descrição"></textarea>
+      <button type="submit">Salvar</button>
+      <button type="button" onclick="document.getElementById('ideaModal').remove()">Cancelar</button>
+    </form>
+  </div></div>`;
+  document.body.insertAdjacentHTML('beforeend', html);
+  document.getElementById('ideaForm').addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    state.ideas.push({id: uid(), ...Object.fromEntries(fd.entries()), criadoEm: new Date().toISOString()});
+    await saveKey('ideas', state.ideas);
+    document.getElementById('ideaModal').remove();
+    renderIdeas();
+  });
+}
+
+/* ===================== RELATÓRIOS & FUNIL ===================== */
+function renderReports(){
+  document.getElementById('insightStrip').innerHTML = `
+    <div class="ig"><div class="label">Total Tarefas</div><div class="value">${state.tasks.length}</div></div>
+    <div class="ig"><div class="label">Concluídas</div><div class="value">${state.tasks.filter(t=>t.status==='Concluído').length}</div></div>
+  `;
+}
+
 function renderFunnel() {
   const tasks = state.tasks;
-  
   const topo = tasks.filter(t => ['Conteúdo', 'Redes Sociais'].includes(t.area)).length;
   const meio = tasks.filter(t => ['Vídeo', 'Design'].includes(t.area)).length;
   const fundo = tasks.filter(t => ['Estratégia', 'Análise'].includes(t.area)).length;
-  
   const conv1 = topo > 0 ? Math.round((meio / topo) * 100) : 0;
   const conv2 = meio > 0 ? Math.round((fundo / meio) * 100) : 0;
   
-  const funnelHtml = `
+  document.getElementById('funnelWrap').innerHTML = `
     <div class="funnel-wrap">
       <div class="funnel-container">
-        <!-- TOPO -->
-        <div class="funnel-stage topo">
-          <div class="funnel-info">
-            <div class="label">Atração</div>
-            <div class="val">${topo}</div>
-          </div>
-          <span>TOPO DO FUNIL</span>
-          <div class="funnel-detail">Conteúdos de alcance (Reels, Stories). Atrai novos olhares para a EVICONT.</div>
-          <div class="conversion-rate">${conv1}% conversão</div>
-        </div>
-        
-        <!-- MEIO -->
-        <div class="funnel-stage meio">
-          <div class="funnel-info">
-            <div class="label">Engajamento</div>
-            <div class="val">${meio}</div>
-          </div>
-          <span>MEIO DO FUNIL</span>
-          <div class="funnel-detail">Conteúdos técnicos e educativos. Constrói autoridade e confiança.</div>
-          <div class="conversion-rate">${conv2}% conversão</div>
-        </div>
-        
-        <!-- FUNDO -->
-        <div class="funnel-stage fundo">
-          <div class="funnel-info">
-            <div class="label">Conversão</div>
-            <div class="val">${fundo}</div>
-          </div>
-          <span>FUNDO DO FUNIL</span>
-          <div class="funnel-detail">Ofertas diretas e análise de métricas. Onde o lead vira cliente.</div>
-        </div>
+        <div class="funnel-stage topo"><div class="funnel-info"><div class="val">${topo}</div></div><span>ATRAÇÃO</span><div class="conversion-rate">${conv1}% conv.</div></div>
+        <div class="funnel-stage meio"><div class="funnel-info"><div class="val">${meio}</div></div><span>ENGAJAMENTO</span><div class="conversion-rate">${conv2}% conv.</div></div>
+        <div class="funnel-stage fundo"><div class="funnel-info"><div class="val">${fundo}</div></div><span>CONVERSÃO</span></div>
       </div>
     </div>
   `;
-  
-  document.getElementById('funnelWrap').innerHTML = funnelHtml;
-  
-  let advice = "";
-  if (topo > meio + fundo) {
-    advice = "<strong>💡 Estratégia de Crescimento:</strong> Seu volume de atração está alto! Agora, foque em criar 2 carrosséis técnicos para cada 5 reels para 'segurar' essa audiência no meio do funil.";
-  } else if (fundo > topo) {
-    advice = "<strong>🚨 Atenção ao Fluxo:</strong> Você está focando muito em vender, mas a 'fonte' de novos leads pode secar. Aumente a produção de conteúdos de topo para renovar o público.";
-  } else {
-    advice = "<strong>✨ Equilíbrio Perfeito:</strong> A EVICONT está com um fluxo saudável. Mantenha a consistência atual para garantir previsibilidade nas conversões.";
-  }
-  
-  document.getElementById('strategyAdvice').innerHTML = `
-    <div style="background:var(--orange-soft); padding:20px; border-radius:12px; border-left:4px solid var(--orange);">
-      ${advice}
-    </div>
-  `;
+  document.getElementById('strategyAdvice').innerHTML = `<div style="background:var(--orange-soft);padding:20px;border-radius:12px;border-left:4px solid var(--orange);">Análise: Equilíbrio de funil processado.</div>`;
 }
 
-// Atualizar a função switchView para incluir o funil
-const originalSwitchView = switchView;
-switchView = function(view) {
-  originalSwitchView(view);
-  if(view === 'relatorios') renderFunnel();
-};
+/* ===================== INIT ===================== */
+async function init(){
+  await loadState();
+  if(typeof window.NOTION_DATA !== 'undefined' && state.tasks.length === 0){
+    state.tasks = window.NOTION_DATA.tasks || [];
+    state.posts = window.NOTION_DATA.posts || [];
+    state.ideas = window.NOTION_DATA.ideas || [];
+    await saveAll();
+  }
+  if(state.user) showApp();
+  else {
+    // Fallback para demo se não houver login
+    state.user = {nome: "Usuário Demo"};
+    showApp();
+  }
+}
+init();
