@@ -267,3 +267,60 @@ function renderTasks(){ console.log('Render Tasks'); }
 function renderCalendar(){ console.log('Render Calendar'); }
 function renderIdeas(){ console.log('Render Ideas'); }
 function renderReports(){ console.log('Render Reports'); }
+
+/* ============ FUNIL DE CONTEÚDO ============ */
+function renderFunnel() {
+  const tasks = state.tasks;
+  
+  // Lógica de classificação simplificada para o protótipo
+  // Em um sistema real, isso viria de um campo "Etapa do Funil"
+  const topo = tasks.filter(t => t.area === 'Conteúdo' || t.area === 'Redes Sociais').length;
+  const meio = tasks.filter(t => t.area === 'Vídeo' || t.area === 'Design').length;
+  const fundo = tasks.filter(t => t.area === 'Estratégia' || t.area === 'Análise').length;
+  
+  const total = topo + meio + fundo || 1;
+  
+  const funnelHtml = `
+    <div class="funnel-container">
+      <div class="funnel-stage topo">
+        <span class="funnel-label">Topo (Atração)</span>
+        <span>ATRAÇÃO</span>
+        <span class="funnel-count">${topo}</span>
+        <span class="funnel-desc">Posts, Reels, Stories. Foco em novos olhares.</span>
+      </div>
+      <div class="funnel-stage meio">
+        <span class="funnel-label">Meio (Engajamento)</span>
+        <span>RECONHECIMENTO</span>
+        <span class="funnel-count">${meio}</span>
+        <span class="funnel-desc">Vídeos longos, Carrosséis técnicos. Autoridade.</span>
+      </div>
+      <div class="funnel-stage fundo">
+        <span class="funnel-label">Fundo (Conversão)</span>
+        <span>DECISÃO</span>
+        <span class="funnel-count">${fundo}</span>
+        <span class="funnel-desc">Ofertas, Depoimentos, Consultoria.</span>
+      </div>
+    </div>
+  `;
+  
+  document.getElementById('funnelWrap').innerHTML = funnelHtml;
+  
+  // Dica estratégica baseada nos dados
+  let advice = "";
+  if (topo > meio + fundo) {
+    advice = "⚠️ <strong>Alerta de Desequilíbrio:</strong> Você tem muita atração (Topo), mas pouco conteúdo de autoridade e venda. Tente criar mais conteúdos técnicos para converter esses novos seguidores.";
+  } else if (fundo > topo) {
+    advice = "🚀 <strong>Foco em Vendas:</strong> Sua estratégia está agressiva em conversão. Certifique-se de que está trazendo pessoas novas para o funil, ou a audiência pode saturar.";
+  } else {
+    advice = "✅ <strong>Funil Saudável:</strong> Sua distribuição de conteúdo está equilibrada entre atrair, educar e converter. Continue assim!";
+  }
+  
+  document.getElementById('strategyAdvice').innerHTML = advice;
+}
+
+// Atualizar a função switchView para incluir o funil
+const originalSwitchView = switchView;
+switchView = function(view) {
+  originalSwitchView(view);
+  if(view === 'relatorios') renderFunnel();
+};
