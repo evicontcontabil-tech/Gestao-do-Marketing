@@ -268,54 +268,71 @@ function renderCalendar(){ console.log('Render Calendar'); }
 function renderIdeas(){ console.log('Render Ideas'); }
 function renderReports(){ console.log('Render Reports'); }
 
-/* ============ FUNIL DE CONTEÚDO ============ */
+/* ============ PREMIUM FUNNEL LOGIC ============ */
 function renderFunnel() {
   const tasks = state.tasks;
   
-  // Lógica de classificação simplificada para o protótipo
-  // Em um sistema real, isso viria de um campo "Etapa do Funil"
-  const topo = tasks.filter(t => t.area === 'Conteúdo' || t.area === 'Redes Sociais').length;
-  const meio = tasks.filter(t => t.area === 'Vídeo' || t.area === 'Design').length;
-  const fundo = tasks.filter(t => t.area === 'Estratégia' || t.area === 'Análise').length;
+  const topo = tasks.filter(t => ['Conteúdo', 'Redes Sociais'].includes(t.area)).length;
+  const meio = tasks.filter(t => ['Vídeo', 'Design'].includes(t.area)).length;
+  const fundo = tasks.filter(t => ['Estratégia', 'Análise'].includes(t.area)).length;
   
-  const total = topo + meio + fundo || 1;
+  const conv1 = topo > 0 ? Math.round((meio / topo) * 100) : 0;
+  const conv2 = meio > 0 ? Math.round((fundo / meio) * 100) : 0;
   
   const funnelHtml = `
-    <div class="funnel-container">
-      <div class="funnel-stage topo">
-        <span class="funnel-label">Topo (Atração)</span>
-        <span>ATRAÇÃO</span>
-        <span class="funnel-count">${topo}</span>
-        <span class="funnel-desc">Posts, Reels, Stories. Foco em novos olhares.</span>
-      </div>
-      <div class="funnel-stage meio">
-        <span class="funnel-label">Meio (Engajamento)</span>
-        <span>RECONHECIMENTO</span>
-        <span class="funnel-count">${meio}</span>
-        <span class="funnel-desc">Vídeos longos, Carrosséis técnicos. Autoridade.</span>
-      </div>
-      <div class="funnel-stage fundo">
-        <span class="funnel-label">Fundo (Conversão)</span>
-        <span>DECISÃO</span>
-        <span class="funnel-count">${fundo}</span>
-        <span class="funnel-desc">Ofertas, Depoimentos, Consultoria.</span>
+    <div class="funnel-wrap">
+      <div class="funnel-container">
+        <!-- TOPO -->
+        <div class="funnel-stage topo">
+          <div class="funnel-info">
+            <div class="label">Atração</div>
+            <div class="val">${topo}</div>
+          </div>
+          <span>TOPO DO FUNIL</span>
+          <div class="funnel-detail">Conteúdos de alcance (Reels, Stories). Atrai novos olhares para a EVICONT.</div>
+          <div class="conversion-rate">${conv1}% conversão</div>
+        </div>
+        
+        <!-- MEIO -->
+        <div class="funnel-stage meio">
+          <div class="funnel-info">
+            <div class="label">Engajamento</div>
+            <div class="val">${meio}</div>
+          </div>
+          <span>MEIO DO FUNIL</span>
+          <div class="funnel-detail">Conteúdos técnicos e educativos. Constrói autoridade e confiança.</div>
+          <div class="conversion-rate">${conv2}% conversão</div>
+        </div>
+        
+        <!-- FUNDO -->
+        <div class="funnel-stage fundo">
+          <div class="funnel-info">
+            <div class="label">Conversão</div>
+            <div class="val">${fundo}</div>
+          </div>
+          <span>FUNDO DO FUNIL</span>
+          <div class="funnel-detail">Ofertas diretas e análise de métricas. Onde o lead vira cliente.</div>
+        </div>
       </div>
     </div>
   `;
   
   document.getElementById('funnelWrap').innerHTML = funnelHtml;
   
-  // Dica estratégica baseada nos dados
   let advice = "";
   if (topo > meio + fundo) {
-    advice = "⚠️ <strong>Alerta de Desequilíbrio:</strong> Você tem muita atração (Topo), mas pouco conteúdo de autoridade e venda. Tente criar mais conteúdos técnicos para converter esses novos seguidores.";
+    advice = "<strong>💡 Estratégia de Crescimento:</strong> Seu volume de atração está alto! Agora, foque em criar 2 carrosséis técnicos para cada 5 reels para 'segurar' essa audiência no meio do funil.";
   } else if (fundo > topo) {
-    advice = "🚀 <strong>Foco em Vendas:</strong> Sua estratégia está agressiva em conversão. Certifique-se de que está trazendo pessoas novas para o funil, ou a audiência pode saturar.";
+    advice = "<strong>🚨 Atenção ao Fluxo:</strong> Você está focando muito em vender, mas a 'fonte' de novos leads pode secar. Aumente a produção de conteúdos de topo para renovar o público.";
   } else {
-    advice = "✅ <strong>Funil Saudável:</strong> Sua distribuição de conteúdo está equilibrada entre atrair, educar e converter. Continue assim!";
+    advice = "<strong>✨ Equilíbrio Perfeito:</strong> A EVICONT está com um fluxo saudável. Mantenha a consistência atual para garantir previsibilidade nas conversões.";
   }
   
-  document.getElementById('strategyAdvice').innerHTML = advice;
+  document.getElementById('strategyAdvice').innerHTML = `
+    <div style="background:var(--orange-soft); padding:20px; border-radius:12px; border-left:4px solid var(--orange);">
+      ${advice}
+    </div>
+  `;
 }
 
 // Atualizar a função switchView para incluir o funil
