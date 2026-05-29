@@ -919,28 +919,20 @@ document.getElementById('exportReportBtn').addEventListener('click', ()=>{
 
 /* ===================== SEED & INIT ===================== */
 async function maybeSeed(){
+  // Só popula se o estado estiver vazio (primeira execução)
   if(state.tasks.length===0 && state.posts.length===0 && state.ideas.length===0){
-    const today = new Date();
-    const addDays = (n) => { const d = new Date(today); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); };
-
-    state.tasks = [
-      {id:uid(), titulo:'Carrossel: Reforma Tributária', area:'Conteúdo', responsavel:state.user.nome, status:'Em andamento', prioridade:'Alta', meta:'Publicar carrossel explicando o que muda em 2026', porque:'Pauta quente, alto interesse do público', dataInicio:addDays(-3), prazo:addDays(2), criadoEm:new Date().toISOString()},
-      {id:uid(), titulo:'Edição vídeo: IRPF 2026', area:'Vídeo', responsavel:state.user.nome, status:'Não iniciado', prioridade:'Alta', meta:'Vídeo curto com prazos e novidades do IRPF', dataInicio:addDays(0), prazo:addDays(5), criadoEm:new Date().toISOString()},
-      {id:uid(), titulo:'Relatório mensal de redes', area:'Análise', responsavel:state.user.nome, status:'Concluído', prioridade:'Média', meta:'Fechar dados do mês anterior', dataInicio:addDays(-10), prazo:addDays(-2), dataConclusao:addDays(-3), contribuicao:'Insights repassados ao time de estratégia', criadoEm:new Date().toISOString()},
-      {id:uid(), titulo:'Roteiro: Pró-labore x Distribuição de Lucros', area:'Conteúdo', responsavel:state.user.nome, status:'Em andamento', prioridade:'Média', dataInicio:addDays(-1), prazo:addDays(4), criadoEm:new Date().toISOString()},
-    ];
-    state.posts = [
-      {id:uid(), data:addDays(1), plataforma:'Instagram', tipo:'Carrossel', titulo:'Reforma Tributária 2026', status:'Em produção', legenda:'O que muda para sua empresa…', criadoEm:new Date().toISOString()},
-      {id:uid(), data:addDays(2), plataforma:'Instagram', tipo:'Story', titulo:'Lembrete IRPF', status:'Planejado', criadoEm:new Date().toISOString()},
-      {id:uid(), data:addDays(4), plataforma:'Instagram', tipo:'Reels', titulo:'Erros comuns no Simples Nacional', status:'Aprovado', criadoEm:new Date().toISOString()},
-      {id:uid(), data:addDays(5), plataforma:'YouTube', tipo:'Vídeo', titulo:'Guia completo IRPF 2026', status:'Planejado', criadoEm:new Date().toISOString()},
-    ];
-    state.ideas = [
-      {id:uid(), titulo:'CNPJ em risco: 5 sinais', categoria:'Carrossel', descricao:'Lista educativa com sinais de problemas contábeis e o que fazer em cada caso.', criadoEm:new Date().toISOString()},
-      {id:uid(), titulo:'Empresário que faturava muito e estava no prejuízo', categoria:'Reels', descricao:'Storytelling baseado em caso real. Gancho forte para falar sobre separar PJ e PF.', criadoEm:new Date().toISOString()},
-      {id:uid(), titulo:'Newsletter mensal — Boletim EVICONT', categoria:'Newsletter', descricao:'Resumo dos prazos do mês + 1 dica prática. Pensar em frequência: quinzenal vs mensal.', criadoEm:new Date().toISOString()},
-    ];
-    await saveAll();
+    if(typeof window.NOTION_DATA !== 'undefined'){
+      // Importa do arquivo data/notion-data.js
+      state.tasks = window.NOTION_DATA.tasks || [];
+      state.posts = window.NOTION_DATA.posts || [];
+      state.ideas = window.NOTION_DATA.ideas || [];
+      await saveAll();
+      const total = state.tasks.length + state.posts.length + state.ideas.length;
+      console.log(`✓ Importado do Notion: ${state.tasks.length} tarefas, ${state.posts.length} postagens, ${state.ideas.length} ideias (${total} itens)`);
+      if(total > 0 && state.user){
+        toast(`${total} itens importados do Notion ✓`);
+      }
+    }
   }
 }
 
