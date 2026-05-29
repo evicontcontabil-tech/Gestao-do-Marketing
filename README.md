@@ -1,4 +1,4 @@
-[README.md](https://github.com/user-attachments/files/28395393/README.md)
+[README.md](https://github.com/user-attachments/files/28395797/README.md)
 # EVICONT · Plataforma de Marketing
 
 Central de gestão do marketing da **EVICONT Contabilidade** — tarefas, calendário editorial, banco de ideias e relatórios de produtividade em um lugar só.
@@ -33,13 +33,29 @@ Central de gestão do marketing da **EVICONT Contabilidade** — tarefas, calend
 
 ```
 .
-├── index.html          # Estrutura da aplicação
+├── index.html              # Estrutura da aplicação
 ├── css/
-│   └── style.css       # Identidade visual EVICONT
+│   └── style.css           # Identidade visual EVICONT
 ├── js/
-│   └── app.js          # Lógica completa (state, views, persistência)
+│   └── app.js              # Lógica completa (state, views, persistência)
+├── data/
+│   └── notion-data.js      # Dados importados do Notion (seed inicial)
 └── README.md
 ```
+
+## ✦ Importação do Notion
+
+O arquivo `data/notion-data.js` contém **73 itens** importados do workspace EVICONT do Notion:
+
+- **25 tarefas** (base "Tarefas Diárias")
+- **23 postagens** (base "Calendário de Conteúdo")
+- **25 ideias** (base "Ideias Prontas")
+
+Cada item importado mantém o **link de origem do Notion** no campo de feedback (tarefas), link (postagens) ou descrição (ideias).
+
+**Última sincronização:** 29/05/2026
+
+Para reimportar dados atualizados do Notion, substitua o arquivo `data/notion-data.js` e abra o app no navegador com `localStorage` limpo (Ctrl+Shift+Del → "Dados de sites").
 
 ## ✦ Como rodar localmente
 
